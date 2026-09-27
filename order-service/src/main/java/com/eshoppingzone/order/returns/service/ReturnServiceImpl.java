@@ -143,9 +143,9 @@ public class ReturnServiceImpl implements ReturnService {
             throw new InvalidReturnStateException("Delivery timestamp is unavailable for this order");
         }
 
-        // 6. Current date is within 30 days from deliveredAt (deliveredAt + 30 days >= current time)
-        if (order.getDeliveredAt().plusDays(30).isBefore(LocalDateTime.now())) {
-            throw new InvalidReturnStateException("Return window has expired for this order (30 days from delivery)");
+        // 6. Current date is within 7 days from deliveredAt (deliveredAt + 7 days >= current time)
+        if (order.getDeliveredAt().plusDays(7).isBefore(LocalDateTime.now())) {
+            throw new InvalidReturnStateException("Return window has expired for this order (7 days from delivery)");
         }
 
         // 7. orderItemId belongs to the specified order
@@ -229,6 +229,10 @@ public class ReturnServiceImpl implements ReturnService {
             throw new DuplicateReturnException("A duplicate return request was detected at database level: " + dive.getMessage());
         }
 
+        // Keep Order status consistent
+        order.setStatus(OrderStatus.RETURN_REQUESTED);
+        orderRepository.save(order);
+
         log.info("Created return request {} for order item {}", returnNumber, orderItem.getId());
 
         publishReturnEvent(saved, "RETURN_REQUESTED");
@@ -292,7 +296,7 @@ public class ReturnServiceImpl implements ReturnService {
                     .map(ReturnDto::fromEntity)
                     .collect(Collectors.toList());
         }
-        return orderReturnRepository.findAll().stream()
+        return orderReturnRepository.findAll(org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt")).stream()
                 .map(ReturnDto::fromEntity)
                 .collect(Collectors.toList());
     }

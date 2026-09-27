@@ -32,7 +32,7 @@ public class AuditLogController {
     @GetMapping
     @Operation(summary = "Search Audit Logs", description = "Admin-only paginated search with database-level multi-attribute filtering")
     public ResponseEntity<ApiResponse<Page<AuditLogDto>>> searchAuditLogs(
-            @RequestParam(required = false) Long actorUserId,
+            @RequestParam(required = false) String actorUserId,
             @RequestParam(required = false) String action,
             @RequestParam(required = false) String resourceType,
             @RequestParam(required = false) String resourceId,
@@ -75,7 +75,7 @@ public class AuditLogController {
     @GetMapping("/user/{userId}")
     @Operation(summary = "Get Audit Logs by Actor User ID", description = "Admin-only retrieval of audit trails for a specific user")
     public ResponseEntity<ApiResponse<Page<AuditLogDto>>> getByUserId(
-            @PathVariable Long userId,
+            @PathVariable String userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         int clampedSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
@@ -97,3 +97,5 @@ public class AuditLogController {
         return ResponseEntity.ok(ApiResponse.success("Resource audit logs retrieved", result));
     }
 }
+
+

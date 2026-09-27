@@ -6,6 +6,8 @@ import java.util.List;
 
 public interface NotificationService {
     NotificationDto createNotification(Long userId, String title, String message, String type);
+    NotificationDto createNotification(Long userId, String recipientRole, String title, String message, String type);
+    NotificationDto createNotification(Long userId, String recipientRole, String title, String message, String type, String eventId);
     List<NotificationDto> getMyNotifications(Long userId);
     List<NotificationDto> getMyUnreadNotifications(Long userId);
     NotificationDto markAsRead(Long notificationId, Long userId);

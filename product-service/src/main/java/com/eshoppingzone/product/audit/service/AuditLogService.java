@@ -61,14 +61,14 @@ public class AuditLogService {
                         String outcome,
                         String failureReason,
                         Map<String, Object> metadata,
-                        Long explicitActorUserId,
+                        String explicitActorUserId,
                         String explicitActorUsername,
                         String explicitActorRole,
                         String idempotencyKey) {
         try {
             AuditContext.AuditContextData context = AuditContext.get();
 
-            Long actorUserId = explicitActorUserId != null ? explicitActorUserId : context.getActorUserId();
+            String actorUserId = explicitActorUserId != null ? explicitActorUserId : String.valueOf(context.getActorUserId());
             String actorUsername = explicitActorUsername != null ? explicitActorUsername : context.getActorUsername();
             String actorRole = explicitActorRole != null ? explicitActorRole : context.getActorRole();
 
@@ -76,7 +76,7 @@ public class AuditLogService {
                 Authentication auth = SecurityContextHolder.getContext().getAuthentication();
                 if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
                     if (auth.getPrincipal() instanceof UserPrincipal principal) {
-                        if (actorUserId == null) actorUserId = principal.getUserId();
+                        if (actorUserId == null) actorUserId = String.valueOf(principal.getUserId());
                         if (actorUsername == null) actorUsername = principal.getUsername();
                         if (actorRole == null) actorRole = principal.getRole();
                     } else {
@@ -194,7 +194,7 @@ public class AuditLogService {
     }
 
     @Transactional(readOnly = true)
-    public Page<AuditLogDto> searchAuditLogs(Long actorUserId,
+    public Page<AuditLogDto> searchAuditLogs(String actorUserId,
                                              String action,
                                              String resourceType,
                                              String resourceId,
@@ -221,7 +221,7 @@ public class AuditLogService {
     }
 
     @Transactional(readOnly = true)
-    public Page<AuditLogDto> getAuditLogsByActor(Long actorUserId, Pageable pageable) {
+    public Page<AuditLogDto> getAuditLogsByActor(String actorUserId, Pageable pageable) {
         return auditLogRepository.findByActorUserId(actorUserId, pageable).map(AuditLogDto::fromEntity);
     }
 
@@ -230,3 +230,4 @@ public class AuditLogService {
         return auditLogRepository.findByResourceTypeAndResourceId(resourceType, resourceId, pageable).map(AuditLogDto::fromEntity);
     }
 }
+

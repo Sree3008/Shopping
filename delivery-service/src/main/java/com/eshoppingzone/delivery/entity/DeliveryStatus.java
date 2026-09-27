@@ -4,6 +4,7 @@ public enum DeliveryStatus {
     PENDING,
     ASSIGNED,
     ACCEPTED,
+    REJECTED,
     PICKED_UP,
     OUT_FOR_DELIVERY,
     DELIVERED,

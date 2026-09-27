@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 
 @RestController
-@RequestMapping({"/api/v1/auth/audit-logs", "/api/v1/audit-logs"})
+@RequestMapping({"/api/v1/auth/audit-logs", "/api/v1/audit-logs", "/api/v1/admin/audit-logs"})
 @Tag(name = "Audit Log Management", description = "Admin-only APIs for querying immutable security and business audit trails")
 @PreAuthorize("hasRole('ADMIN')")
 public class AuditLogController {
@@ -32,7 +32,7 @@ public class AuditLogController {
     @GetMapping
     @Operation(summary = "Search Audit Logs", description = "Admin-only paginated search with database-level multi-attribute filtering")
     public ResponseEntity<ApiResponse<Page<AuditLogDto>>> searchAuditLogs(
-            @RequestParam(required = false) Long actorUserId,
+            @RequestParam(required = false) String actorUserId,
             @RequestParam(required = false) String action,
             @RequestParam(required = false) String resourceType,
             @RequestParam(required = false) String resourceId,
@@ -58,7 +58,7 @@ public class AuditLogController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get Audit Log by ID", description = "Admin-only retrieval of a single audit log record by primary key")
-    public ResponseEntity<ApiResponse<AuditLogDto>> getById(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<AuditLogDto>> getById(@PathVariable("id") Long id) {
         return auditLogService.getAuditLogById(id)
                 .map(dto -> ResponseEntity.ok(ApiResponse.success("Audit log found", dto)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
@@ -66,7 +66,7 @@ public class AuditLogController {
 
     @GetMapping("/event/{eventId}")
     @Operation(summary = "Get Audit Log by Event ID", description = "Admin-only retrieval of audit log record by unique UUID eventId")
-    public ResponseEntity<ApiResponse<AuditLogDto>> getByEventId(@PathVariable String eventId) {
+    public ResponseEntity<ApiResponse<AuditLogDto>> getByEventId(@PathVariable("eventId") String eventId) {
         return auditLogService.getAuditLogByEventId(eventId)
                 .map(dto -> ResponseEntity.ok(ApiResponse.success("Audit log found", dto)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
@@ -75,7 +75,7 @@ public class AuditLogController {
     @GetMapping("/user/{userId}")
     @Operation(summary = "Get Audit Logs by Actor User ID", description = "Admin-only retrieval of audit trails for a specific user")
     public ResponseEntity<ApiResponse<Page<AuditLogDto>>> getByUserId(
-            @PathVariable Long userId,
+            @PathVariable("userId") String userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         int clampedSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
@@ -87,8 +87,8 @@ public class AuditLogController {
     @GetMapping("/resource/{resourceType}/{resourceId}")
     @Operation(summary = "Get Audit Logs by Resource", description = "Admin-only retrieval of audit trail for a specific resource")
     public ResponseEntity<ApiResponse<Page<AuditLogDto>>> getByResource(
-            @PathVariable String resourceType,
-            @PathVariable String resourceId,
+            @PathVariable("resourceType") String resourceType,
+            @PathVariable("resourceId") String resourceId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         int clampedSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
@@ -97,3 +97,5 @@ public class AuditLogController {
         return ResponseEntity.ok(ApiResponse.success("Resource audit logs retrieved", result));
     }
 }
+
+

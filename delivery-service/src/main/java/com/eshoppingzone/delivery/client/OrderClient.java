@@ -13,7 +13,7 @@ import java.util.Map;
 @FeignClient(name = "order-service")
 public interface OrderClient {
 
-    @GetMapping("/api/v1/orders/{id}")
+    @GetMapping("/api/v1/orders/{id}/internal")
     ApiResponse<OrderDto> getOrderById(@PathVariable("id") Long id);
 
     @PutMapping("/api/v1/orders/{id}/status/internal")

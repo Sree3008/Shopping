@@ -82,7 +82,7 @@ public class AuthServiceImpl implements AuthService {
         if (auditLogService != null) {
             try {
                 auditLogService.log(action, resourceType, resourceId, outcome, failureReason, metadata,
-                        actorUserId, actorUsername, actorRole, null);
+                        actorUserId != null ? String.valueOf(actorUserId) : null, actorUsername, actorRole, null);
             } catch (Exception e) {
                 log.warn("Failed to audit action {}: {}", action, e.getMessage());
             }
@@ -377,9 +377,13 @@ public class AuthServiceImpl implements AuthService {
 
         String token = request.getRefreshToken();
 
-        if (token == null || token.isBlank()) {
+        if (token == null) {
             throw new InvalidTokenException(
                     "Refresh token is required for logout");
+        }
+        
+        if (token.isBlank()) {
+            return; // Gracefully handle empty token from merchant logout
         }
 
         if (!jwtTokenProvider.validateToken(token)) {

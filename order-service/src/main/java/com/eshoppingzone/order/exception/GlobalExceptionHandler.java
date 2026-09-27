@@ -72,6 +72,11 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(ApiResponse.error("Access denied"), HttpStatus.FORBIDDEN);
     }
 
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Object>> handleTypeMismatch(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex) {
+        return new ResponseEntity<>(ApiResponse.error("Invalid parameter type: " + ex.getName()), HttpStatus.BAD_REQUEST);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationExceptions(MethodArgumentNotValidException ex) {
         Map<String, String> errors = new HashMap<>();

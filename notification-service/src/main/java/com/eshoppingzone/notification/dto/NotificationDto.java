@@ -8,6 +8,7 @@ public class NotificationDto {
 
     private Long id;
     private Long userId;
+    private String recipientRole;
     private String title;
     private String message;
     private String type;
@@ -24,6 +25,7 @@ public class NotificationDto {
         NotificationDto dto = new NotificationDto();
         dto.setId(notification.getId());
         dto.setUserId(notification.getUserId());
+        dto.setRecipientRole(notification.getRecipientRole());
         dto.setTitle(notification.getTitle());
         dto.setMessage(notification.getMessage());
         dto.setType(notification.getType());
@@ -46,6 +48,22 @@ public class NotificationDto {
 
     public void setUserId(Long userId) {
         this.userId = userId;
+    }
+
+    public Long getRecipientUserId() {
+        return userId;
+    }
+
+    public void setRecipientUserId(Long recipientUserId) {
+        this.userId = recipientUserId;
+    }
+
+    public String getRecipientRole() {
+        return recipientRole;
+    }
+
+    public void setRecipientRole(String recipientRole) {
+        this.recipientRole = recipientRole;
     }
 
     public String getTitle() {

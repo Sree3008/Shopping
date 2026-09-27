@@ -54,10 +54,6 @@ public class PagedResponse<T> {
         this.content = content != null ? content : Collections.emptyList();
     }
 
-    public List<T> getProducts() {
-        return content;
-    }
-
     public int getPage() {
         return page;
     }

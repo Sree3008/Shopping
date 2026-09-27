@@ -116,6 +116,13 @@ class NotificationSecurityTest {
     }
 
     @Test
+    void getUserNotifications_withInvalidToken_shouldReturn401() throws Exception {
+        mockMvc.perform(get("/api/v1/notifications/user/99")
+                        .header("Authorization", "Bearer invalid.token"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void getUserNotifications_withAdminToken_shouldReturn200() throws Exception {
         String adminToken = generateToken("adminUser", 1L, "ADMIN", 3600000);
         NotificationDto dto = new NotificationDto();

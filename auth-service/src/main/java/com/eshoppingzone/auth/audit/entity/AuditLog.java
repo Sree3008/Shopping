@@ -26,7 +26,7 @@ public class AuditLog {
     private LocalDateTime timestamp;
 
     @Column(name = "actor_user_id", updatable = false)
-    private Long actorUserId;
+    private String actorUserId;
 
     @Column(name = "actor_username", updatable = false, length = 100)
     private String actorUsername;
@@ -122,11 +122,11 @@ public class AuditLog {
         this.timestamp = timestamp;
     }
 
-    public Long getActorUserId() {
+    public String getActorUserId() {
         return actorUserId;
     }
 
-    public void setActorUserId(Long actorUserId) {
+    public void setActorUserId(String actorUserId) {
         this.actorUserId = actorUserId;
     }
 

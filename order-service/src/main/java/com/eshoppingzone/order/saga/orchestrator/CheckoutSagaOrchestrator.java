@@ -131,7 +131,10 @@ public class CheckoutSagaOrchestrator {
         try {
             ApiResponse<Void> stockRes = inventoryClient.reserveStock(stockReq);
             if (stockRes != null && !stockRes.isSuccess()) {
-                throw new InsufficientStockException("Inventory reservation failed for order items");
+                String errorMsg = (stockRes.getMessage() != null && !stockRes.getMessage().isBlank())
+                        ? stockRes.getMessage()
+                        : "Inventory reservation failed for order items";
+                throw new InsufficientStockException(errorMsg);
             }
             currentStatus = transition(sagaId, currentStatus, SagaStep.PROCESS_PAYMENT,
                     SagaStatus.INVENTORY_RESERVED, SagaStep.RESERVE_INVENTORY);
@@ -140,7 +143,11 @@ public class CheckoutSagaOrchestrator {
             transition(sagaId, currentStatus, SagaStep.RESERVE_INVENTORY, SagaStatus.FAILED, null);
             sagaStateService.updateOrderStatus(order.getId(), OrderStatus.FAILED, PaymentStatus.FAILED);
             publishOrderEvent(order, "ORDER_FAILED", RabbitMQConfig.ORDER_STATUS_ROUTING_KEY);
-            throw new InsufficientStockException("Failed to reserve inventory: " + e.getMessage());
+            String failureDetail = e.getMessage() != null ? e.getMessage() : "Inventory reservation failed for order items";
+            if (!failureDetail.startsWith("Failed to reserve inventory")) {
+                failureDetail = "Failed to reserve inventory: " + failureDetail;
+            }
+            throw new InsufficientStockException(failureDetail);
         }
 
         // Step 2: Process Payment (Remote Call 2)
@@ -201,6 +208,7 @@ public class CheckoutSagaOrchestrator {
 
         boolean paymentSuccess = false;
         boolean paymentDefinitivelyFailed = false;
+        String paymentErrorMessage = null;
 
         try {
             ApiResponse<PaymentResponseDto> payRes = paymentClient.processPayment(payReq);
@@ -208,9 +216,13 @@ public class CheckoutSagaOrchestrator {
                 paymentSuccess = true;
             } else {
                 paymentDefinitivelyFailed = true;
+                if (payRes != null && payRes.getMessage() != null && !payRes.getMessage().isBlank()) {
+                    paymentErrorMessage = payRes.getMessage();
+                }
             }
         } catch (Exception e) {
             log.warn("Saga [{}] Step 2 (PROCESS_PAYMENT) call threw exception: {}. Querying payment status truth...", sagaId, e.getMessage());
+            paymentErrorMessage = e.getMessage();
             // Financial safety: query payment status to verify truth before deciding compensation
             try {
                 ApiResponse<PaymentResponseDto> lookupRes = paymentClient.getPaymentByOrderId(order.getId());
@@ -251,7 +263,10 @@ public class CheckoutSagaOrchestrator {
             order.setPaymentStatus(PaymentStatus.FAILED);
 
             publishOrderEvent(order, "ORDER_FAILED", RabbitMQConfig.ORDER_STATUS_ROUTING_KEY);
-            throw new PaymentException("Payment failed. Insufficient wallet balance or payment error.");
+            String finalError = (paymentErrorMessage != null && !paymentErrorMessage.isBlank())
+                    ? paymentErrorMessage
+                    : "Payment failed. Insufficient wallet balance or payment error.";
+            throw new PaymentException(finalError);
         } else {
             // Payment status is UNKNOWN/PENDING -> Never blindly release inventory or fail order!
             log.warn("Saga [{}] payment status is UNKNOWN/PENDING. Moving to PAYMENT_RECONCILIATION_REQUIRED.", sagaId);
@@ -300,6 +315,7 @@ public class CheckoutSagaOrchestrator {
                     order.getId(),
                     order.getOrderNumber(),
                     order.getCustomerId(),
+                    order.getMerchantId(),
                     order.getTotalAmount(),
                     order.getStatus() != null ? order.getStatus().name() : "UNKNOWN",
                     order.getPaymentMethod() != null ? order.getPaymentMethod().name() : "UNKNOWN",

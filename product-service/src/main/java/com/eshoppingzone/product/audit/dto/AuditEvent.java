@@ -8,7 +8,7 @@ public class AuditEvent implements Serializable {
 
     private String eventId;
     private LocalDateTime timestamp;
-    private Long actorUserId;
+    private String actorUserId;
     private String actorUsername;
     private String actorRole;
     private String serviceName;
@@ -22,7 +22,7 @@ public class AuditEvent implements Serializable {
     public AuditEvent() {
     }
 
-    public AuditEvent(String eventId, LocalDateTime timestamp, Long actorUserId, String actorUsername,
+    public AuditEvent(String eventId, LocalDateTime timestamp, String actorUserId, String actorUsername,
                       String actorRole, String serviceName, String action, String resourceType,
                       String resourceId, String outcome, String correlationId, String metadata) {
         this.eventId = eventId;
@@ -47,7 +47,7 @@ public class AuditEvent implements Serializable {
         return timestamp;
     }
 
-    public Long getActorUserId() {
+    public String getActorUserId() {
         return actorUserId;
     }
 
@@ -87,3 +87,4 @@ public class AuditEvent implements Serializable {
         return metadata;
     }
 }
+

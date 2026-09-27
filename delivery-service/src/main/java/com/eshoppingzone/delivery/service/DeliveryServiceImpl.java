@@ -40,10 +40,10 @@ public class DeliveryServiceImpl implements DeliveryService {
 
     @org.springframework.beans.factory.annotation.Autowired
     public DeliveryServiceImpl(DeliveryRepository deliveryRepository,
-                               OrderClient orderClient,
-                               PaymentClient paymentClient,
-                               RabbitTemplate rabbitTemplate,
-                               @org.springframework.beans.factory.annotation.Autowired(required = false) com.eshoppingzone.delivery.audit.service.AuditLogService auditLogService) {
+            OrderClient orderClient,
+            PaymentClient paymentClient,
+            RabbitTemplate rabbitTemplate,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) com.eshoppingzone.delivery.audit.service.AuditLogService auditLogService) {
         this.deliveryRepository = deliveryRepository;
         this.orderClient = orderClient;
         this.paymentClient = paymentClient;
@@ -52,9 +52,9 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     public DeliveryServiceImpl(DeliveryRepository deliveryRepository,
-                               OrderClient orderClient,
-                               PaymentClient paymentClient,
-                               RabbitTemplate rabbitTemplate) {
+            OrderClient orderClient,
+            PaymentClient paymentClient,
+            RabbitTemplate rabbitTemplate) {
         this(deliveryRepository, orderClient, paymentClient, rabbitTemplate, null);
     }
 
@@ -68,7 +68,8 @@ public class DeliveryServiceImpl implements DeliveryService {
         return map;
     }
 
-    private void audit(String action, String resourceType, String resourceId, String outcome, String failureReason, java.util.Map<String, Object> metadata) {
+    private void audit(String action, String resourceType, String resourceId, String outcome, String failureReason,
+            java.util.Map<String, Object> metadata) {
         if (auditLogService != null) {
             try {
                 auditLogService.logAction(action, resourceType, resourceId, outcome, failureReason, metadata);
@@ -81,7 +82,35 @@ public class DeliveryServiceImpl implements DeliveryService {
     @Override
     @Transactional
     public DeliveryDto assignDelivery(AssignDeliveryRequest request) {
-        log.info("Assigning delivery for orderId: {} to agentId: {}", request.getOrderId(), request.getDeliveryAgentId());
+        log.info("Assigning delivery for orderId: {} to agentId: {}", request.getOrderId(),
+                request.getDeliveryAgentId());
+
+        // Verify order status before assigning delivery
+        try {
+            ApiResponse<OrderDto> orderResponse = orderClient.getOrderById(request.getOrderId());
+            if (orderResponse != null && orderResponse.getData() != null) {
+                String status = orderResponse.getData().getStatus();
+                if ("CANCELLED".equals(status) || "FAILED".equals(status) || "FAILED_DELIVERY".equals(status)) {
+                    throw new DeliveryException("Cannot assign delivery for an order in status: " + status);
+                }
+            }
+        } catch (DeliveryException de) {
+            throw de;
+        } catch (Exception ex) {
+            log.warn("Could not verify order status before assigning delivery for orderId={}: {}", request.getOrderId(),
+                    ex.getMessage());
+        }
+
+        Long adminId = 1L;
+        try {
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
+            if (auth != null && auth.getPrincipal() instanceof com.eshoppingzone.delivery.security.UserPrincipal up
+                    && up.getUserId() != null) {
+                adminId = up.getUserId();
+            }
+        } catch (Exception ignored) {
+        }
 
         Optional<Delivery> existingOpt = deliveryRepository.findByOrderId(request.getOrderId());
         Delivery delivery;
@@ -91,14 +120,17 @@ public class DeliveryServiceImpl implements DeliveryService {
                 throw new DeliveryException("Order has already been delivered");
             }
             delivery.setDeliveryAgentId(request.getDeliveryAgentId());
+            delivery.setAssignedByAdminId(adminId);
             delivery.setPickupAddress(request.getPickupAddress());
             delivery.setDeliveryAddress(request.getDeliveryAddress());
             delivery.setCustomerPhone(request.getCustomerPhone());
             delivery.setStatus(DeliveryStatus.ASSIGNED);
             delivery.setAssignedAt(LocalDateTime.now());
         } else {
-            delivery = new Delivery(request.getOrderId(), request.getCustomerId(), request.getDeliveryAddress(), request.getCustomerPhone());
+            delivery = new Delivery(request.getOrderId(), request.getCustomerId(), request.getDeliveryAddress(),
+                    request.getCustomerPhone());
             delivery.setDeliveryAgentId(request.getDeliveryAgentId());
+            delivery.setAssignedByAdminId(adminId);
             delivery.setPickupAddress(request.getPickupAddress());
             delivery.setStatus(DeliveryStatus.ASSIGNED);
             delivery.setAssignedAt(LocalDateTime.now());
@@ -106,7 +138,18 @@ public class DeliveryServiceImpl implements DeliveryService {
 
         Delivery saved = deliveryRepository.save(delivery);
         audit("DELIVERY_ASSIGNED", "DELIVERY", String.valueOf(saved.getId()), "SUCCESS", null,
-                safeMeta("orderId", saved.getOrderId(), "customerId", saved.getCustomerId(), "deliveryAgentId", saved.getDeliveryAgentId(), "status", saved.getStatus()));
+                safeMeta("orderId", saved.getOrderId(), "customerId", saved.getCustomerId(), "deliveryAgentId",
+                        saved.getDeliveryAgentId(), "status", saved.getStatus()));
+
+        // Notify order-service of ASSIGNED status
+        try {
+            log.info("[DELIVERY_ASSIGNED] Notifying order-service for orderId={} to status ASSIGNED",
+                    saved.getOrderId());
+            orderClient.updateOrderStatus(saved.getOrderId(), Collections.singletonMap("status", "ASSIGNED"));
+        } catch (Exception ex) {
+            log.warn("[DELIVERY_ASSIGNED] Failed to notify order-service of ASSIGNED status for orderId={}: {}",
+                    saved.getOrderId(), ex.getMessage());
+        }
 
         // Publish DELIVERY_ASSIGNED event
         try {
@@ -116,11 +159,12 @@ public class DeliveryServiceImpl implements DeliveryService {
                     saved.getOrderId(),
                     saved.getCustomerId(),
                     saved.getDeliveryAgentId(),
+                    saved.getAssignedByAdminId(),
                     saved.getStatus().name(),
-                    null
-            );
+                    null);
             CorrelationData correlationData = new CorrelationData("delivery-" + saved.getId() + "-ASSIGNED");
-            rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE, RabbitMQConfig.ROUTING_KEY_DELIVERY_ASSIGNED, event, correlationData);
+            rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE, RabbitMQConfig.ROUTING_KEY_DELIVERY_ASSIGNED, event,
+                    correlationData);
         } catch (Exception ex) {
             log.error("Failed to publish DELIVERY_ASSIGNED event: {}", ex.getMessage());
         }
@@ -158,7 +202,8 @@ public class DeliveryServiceImpl implements DeliveryService {
 
     @Override
     @Transactional
-    public DeliveryDto updateDeliveryStatusByAgent(Long deliveryAgentId, Long deliveryId, UpdateDeliveryStatusRequest request) {
+    public DeliveryDto updateDeliveryStatusByAgent(Long deliveryAgentId, Long deliveryId,
+            UpdateDeliveryStatusRequest request) {
         Delivery delivery = deliveryRepository.findById(deliveryId)
                 .orElseThrow(() -> new ResourceNotFoundException("Delivery not found with id: " + deliveryId));
 
@@ -178,36 +223,83 @@ public class DeliveryServiceImpl implements DeliveryService {
         delivery.setStatus(newStatus);
 
         if (newStatus == DeliveryStatus.PICKED_UP) {
-            delivery.setPickedUpAt(LocalDateTime.now());
+            if (delivery.getPickedUpAt() == null) {
+                delivery.setPickedUpAt(LocalDateTime.now());
+            }
         } else if (newStatus == DeliveryStatus.OUT_FOR_DELIVERY) {
-            // Update order status to OUT_FOR_DELIVERY
+            if (delivery.getPickedUpAt() == null) {
+                throw new DeliveryException(
+                        "Cannot set status to OUT_FOR_DELIVERY because package was not picked up (pickedUpAt is null)");
+            }
             try {
-                orderClient.updateOrderStatus(delivery.getOrderId(), Collections.singletonMap("status", "OUT_FOR_DELIVERY"));
+                log.info("[OUT_FOR_DELIVERY] Updating orderId={} to OUT_FOR_DELIVERY via OrderClient for agentId={}",
+                        delivery.getOrderId(), deliveryAgentId);
+                orderClient.updateOrderStatus(delivery.getOrderId(),
+                        Collections.singletonMap("status", "OUT_FOR_DELIVERY"));
             } catch (Exception ex) {
-                log.warn("Failed to notify order-service of OUT_FOR_DELIVERY status: {}", ex.getMessage());
+                log.error(
+                        "[OUT_FOR_DELIVERY] Failed to notify order-service of OUT_FOR_DELIVERY status for orderId={}: {}",
+                        delivery.getOrderId(), ex.getMessage(), ex);
+                throw new DeliveryException("Failed to notify order-service of OUT_FOR_DELIVERY status", ex);
             }
         } else if (newStatus == DeliveryStatus.DELIVERED) {
-            delivery.setDeliveredAt(LocalDateTime.now());
-            // Update order status to DELIVERED
+            if (delivery.getPickedUpAt() == null) {
+                throw new DeliveryException(
+                        "Cannot set status to DELIVERED because package was not picked up (pickedUpAt is null)");
+            }
+            // Check if order is eligible for delivery completion
             try {
-                orderClient.updateOrderStatus(delivery.getOrderId(), Collections.singletonMap("status", "DELIVERED"));
+                ApiResponse<OrderDto> orderResponse = orderClient.getOrderById(delivery.getOrderId());
+                if (orderResponse != null && orderResponse.getData() != null) {
+                    String status = orderResponse.getData().getStatus();
+                    if ("CANCELLED".equals(status) || "RETURN_REQUESTED".equals(status) || "RETURNED".equals(status)
+                            || "FAILED_DELIVERY".equals(status) || "FAILED".equals(status)) {
+                        throw new DeliveryException("Cannot complete delivery for an order in status: " + status);
+                    }
+                }
+            } catch (DeliveryException ex) {
+                throw ex;
             } catch (Exception ex) {
-                log.warn("Failed to notify order-service of DELIVERED status: {}", ex.getMessage());
+                log.warn("Could not verify order status before completing delivery for orderId={}: {}",
+                        delivery.getOrderId(), ex.getMessage());
             }
 
-            // Complete COD payment if applicable
+            delivery.setDeliveredAt(LocalDateTime.now());
+            try {
+                log.info("[DELIVERED] Updating orderId={} to DELIVERED via OrderClient for agentId={}",
+                        delivery.getOrderId(), deliveryAgentId);
+                orderClient.updateOrderStatus(delivery.getOrderId(), Collections.singletonMap("status", "DELIVERED"));
+            } catch (Exception ex) {
+                log.error("[DELIVERED] Failed to notify order-service of DELIVERED status for orderId={}: {}",
+                        delivery.getOrderId(), ex.getMessage(), ex);
+                throw new DeliveryException("Failed to notify order-service of DELIVERED status", ex);
+            }
+
             try {
                 paymentClient.completeCodPayment(delivery.getOrderId());
             } catch (Exception ex) {
-                log.info("COD payment completion check finished for orderId: {}", delivery.getOrderId());
+                throw new DeliveryException("Failed to complete COD payment", ex);
             }
         } else if (newStatus == DeliveryStatus.FAILED) {
-            delivery.setFailureReason(request.getFailureReason() != null ? request.getFailureReason() : "Delivery failed");
+            delivery.setFailureReason(
+                    request.getFailureReason() != null ? request.getFailureReason() : "Delivery failed");
+            try {
+                orderClient.updateOrderStatus(delivery.getOrderId(), Collections.singletonMap("status", "FAILED"));
+            } catch (Exception ex) {
+                throw new DeliveryException("Failed to notify order-service of FAILED status", ex);
+            }
+        } else if (newStatus == DeliveryStatus.CANCELLED) {
+            try {
+                orderClient.updateOrderStatus(delivery.getOrderId(), Collections.singletonMap("status", "CANCELLED"));
+            } catch (Exception ex) {
+                throw new DeliveryException("Failed to notify order-service of CANCELLED status", ex);
+            }
         }
 
         Delivery saved = deliveryRepository.save(delivery);
         audit("DELIVERY_STATUS_CHANGED", "DELIVERY", String.valueOf(saved.getId()), "SUCCESS", saved.getFailureReason(),
-                safeMeta("orderId", saved.getOrderId(), "deliveryAgentId", deliveryAgentId, "oldStatus", oldStatus, "newStatus", saved.getStatus()));
+                safeMeta("orderId", saved.getOrderId(), "deliveryAgentId", deliveryAgentId, "oldStatus", oldStatus,
+                        "newStatus", saved.getStatus()));
 
         // Publish event
         try {
@@ -217,11 +309,12 @@ public class DeliveryServiceImpl implements DeliveryService {
                     saved.getOrderId(),
                     saved.getCustomerId(),
                     saved.getDeliveryAgentId(),
+                    saved.getAssignedByAdminId(),
                     saved.getStatus().name(),
-                    saved.getFailureReason()
-            );
+                    saved.getFailureReason());
             CorrelationData correlationData = new CorrelationData("delivery-" + saved.getId() + "-STATUS_CHANGED");
-            rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE, RabbitMQConfig.ROUTING_KEY_DELIVERY_STATUS, event, correlationData);
+            rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE, RabbitMQConfig.ROUTING_KEY_DELIVERY_STATUS, event,
+                    correlationData);
         } catch (Exception ex) {
             log.error("Failed to publish DELIVERY_STATUS_CHANGED event: {}", ex.getMessage());
         }
@@ -230,11 +323,43 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     private void validateStatusTransition(DeliveryStatus current, DeliveryStatus next) {
-        if (current == DeliveryStatus.DELIVERED) {
-            throw new DeliveryException("Cannot change status of an already delivered package");
+        if (current == null) {
+            if (next == DeliveryStatus.PENDING || next == DeliveryStatus.ASSIGNED) {
+                return;
+            }
+            throw new DeliveryException("Delivery cannot transition from an unknown state to " + next);
         }
-        if (current == DeliveryStatus.CANCELLED) {
-            throw new DeliveryException("Cannot change status of a cancelled delivery");
+
+        if (current == next) {
+            return; // Idempotent same-state transition
+        }
+
+        if (current == DeliveryStatus.DELIVERED || current == DeliveryStatus.CANCELLED) {
+            throw new DeliveryException(
+                    "Cannot change status of an already " + current.name().toLowerCase() + " delivery");
+        }
+
+        if (current == DeliveryStatus.FAILED && next != DeliveryStatus.CANCELLED) {
+            throw new DeliveryException("A failed delivery cannot be resumed; it must be cancelled or left as failed");
+        }
+
+        boolean allowed = switch (current) {
+            case PENDING -> next == DeliveryStatus.ASSIGNED || next == DeliveryStatus.CANCELLED;
+            case ASSIGNED ->
+                next == DeliveryStatus.ACCEPTED || next == DeliveryStatus.REJECTED || next == DeliveryStatus.PICKED_UP
+                        || next == DeliveryStatus.FAILED || next == DeliveryStatus.CANCELLED;
+            case ACCEPTED ->
+                next == DeliveryStatus.PICKED_UP || next == DeliveryStatus.FAILED || next == DeliveryStatus.CANCELLED;
+            case PICKED_UP -> next == DeliveryStatus.OUT_FOR_DELIVERY || next == DeliveryStatus.FAILED
+                    || next == DeliveryStatus.CANCELLED;
+            case OUT_FOR_DELIVERY ->
+                next == DeliveryStatus.DELIVERED || next == DeliveryStatus.FAILED || next == DeliveryStatus.CANCELLED;
+            case REJECTED, FAILED -> next == DeliveryStatus.CANCELLED;
+            default -> false;
+        };
+
+        if (!allowed) {
+            throw new DeliveryException("Invalid delivery status transition from " + current + " to " + next);
         }
     }
 

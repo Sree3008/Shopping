@@ -132,6 +132,27 @@ public class PaymentServiceImpl implements PaymentService {
         }
     }
 
+    private String extractFeignErrorMessage(Throwable cause, String defaultMsg) {
+        if (cause == null) return defaultMsg;
+        if (cause instanceof feign.FeignException feignException) {
+            try {
+                String content = feignException.contentUTF8();
+                if (content != null && !content.isBlank()) {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    com.fasterxml.jackson.databind.JsonNode node = mapper.readTree(content);
+                    if (node.has("message") && !node.get("message").isNull()) {
+                        return node.get("message").asText();
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+            if (feignException.getMessage() != null && !feignException.getMessage().isBlank()) {
+                return feignException.getMessage();
+            }
+        }
+        return cause.getMessage() != null ? cause.getMessage() : defaultMsg;
+    }
+
     private PaymentDto executeProcessPayment(ProcessPaymentRequest request, String effectiveKey) {
         log.info("Processing payment for orderId: {}, customerId: {}, amount: {}, method: {}",
                 request.getOrderId(), request.getCustomerId(), request.getAmount(), request.getPaymentMethod());
@@ -164,27 +185,57 @@ public class PaymentServiceImpl implements PaymentService {
                 WalletTransferRequest debitReq = new WalletTransferRequest(
                         request.getCustomerId(),
                         request.getAmount(),
-                        txnRef,
+                        txnRef + "-DEBIT",
                         "Payment for Order #" + request.getOrderId()
                 );
-                ApiResponse<WalletDto> debitRes = walletClient.debit(debitReq);
+                ApiResponse<WalletDto> debitRes = null;
+                try {
+                    debitRes = walletClient.debit(debitReq);
+                } catch (Exception ex) {
+                    payment.setStatus(PaymentStatus.FAILED);
+                    Payment saved = paymentRepository.save(payment);
+                    publishPaymentEvent(saved, "PAYMENT_FAILED", RabbitMQConfig.PAYMENT_FAILED_ROUTING_KEY);
+                    String errorMsg = extractFeignErrorMessage(ex, "Wallet debit failed: insufficient funds or wallet unavailable");
+                    audit("PAYMENT_FAILED", "PAYMENT", String.valueOf(saved.getId()), "FAILURE", errorMsg,
+                            safeMeta("orderId", request.getOrderId(), "amount", request.getAmount(), "paymentMethod", "WALLET", "customerId", request.getCustomerId()));
+                    throw new PaymentException(errorMsg);
+                }
+
                 if (debitRes == null || !debitRes.isSuccess()) {
                     payment.setStatus(PaymentStatus.FAILED);
                     Payment saved = paymentRepository.save(payment);
                     publishPaymentEvent(saved, "PAYMENT_FAILED", RabbitMQConfig.PAYMENT_FAILED_ROUTING_KEY);
-                    audit("PAYMENT_FAILED", "PAYMENT", String.valueOf(saved.getId()), "FAILURE", "Wallet debit failed: insufficient funds or wallet unavailable",
+                    String errorMsg = debitRes != null && debitRes.getMessage() != null ? debitRes.getMessage() : "Wallet debit failed: insufficient funds or wallet unavailable";
+                    audit("PAYMENT_FAILED", "PAYMENT", String.valueOf(saved.getId()), "FAILURE", errorMsg,
                             safeMeta("orderId", request.getOrderId(), "amount", request.getAmount(), "paymentMethod", "WALLET", "customerId", request.getCustomerId()));
-                    throw new PaymentException("Wallet debit failed: insufficient funds or wallet unavailable");
+                    throw new PaymentException(errorMsg);
                 }
 
                 // 2. Credit Platform Wallet
                 WalletTransferRequest creditReq = new WalletTransferRequest(
                         PLATFORM_WALLET_USER_ID,
                         request.getAmount(),
-                        txnRef,
+                        txnRef + "-CREDIT",
                         "Revenue from Order #" + request.getOrderId()
                 );
-                walletClient.credit(creditReq);
+                
+                try {
+                    walletClient.credit(creditReq);
+                } catch (Exception e) {
+                    log.error("Platform wallet credit failed, reverting customer debit for order {}: {}", request.getOrderId(), e.getMessage());
+                    try {
+                        WalletTransferRequest revertReq = new WalletTransferRequest(
+                                request.getCustomerId(),
+                                request.getAmount(),
+                                txnRef + "-REVERT-DEBIT",
+                                "Revert failed payment for Order #" + request.getOrderId()
+                        );
+                        walletClient.credit(revertReq);
+                    } catch (Exception revertEx) {
+                        log.error("CRITICAL: Failed to revert customer wallet debit for order {}! Manual intervention required. Error: {}", request.getOrderId(), revertEx.getMessage());
+                    }
+                    throw new PaymentException("Platform wallet credit failed, payment reverted: " + e.getMessage());
+                }
 
                 payment.setStatus(PaymentStatus.SUCCESS);
                 Payment saved = paymentRepository.save(payment);
@@ -196,11 +247,35 @@ public class PaymentServiceImpl implements PaymentService {
             } catch (PaymentException pe) {
                 throw pe;
             } catch (Exception e) {
+                // Compensate if wallet was debited but subsequent operations (e.g. save or publish) failed
+                log.error("Payment flow failed after wallet deduction for order {}. Compensating... Error: {}", request.getOrderId(), e.getMessage());
+                try {
+                    WalletTransferRequest revertReq = new WalletTransferRequest(
+                            request.getCustomerId(),
+                            request.getAmount(),
+                            txnRef + "-REVERT",
+                            "Revert failed payment for Order #" + request.getOrderId()
+                    );
+                    walletClient.credit(revertReq);
+                    
+                    WalletTransferRequest revertPlatformReq = new WalletTransferRequest(
+                            PLATFORM_WALLET_USER_ID,
+                            request.getAmount(),
+                            txnRef + "-REVERT-PLATFORM",
+                            "Revert failed platform credit for Order #" + request.getOrderId()
+                    );
+                    walletClient.debit(revertPlatformReq);
+                } catch (Exception revertEx) {
+                    log.error("CRITICAL: Failed to compensate wallets for order {}! Manual intervention required. Error: {}", request.getOrderId(), revertEx.getMessage());
+                }
+
                 payment.setStatus(PaymentStatus.FAILED);
-                Payment saved = paymentRepository.save(payment);
-                publishPaymentEvent(saved, "PAYMENT_FAILED", RabbitMQConfig.PAYMENT_FAILED_ROUTING_KEY);
-                audit("PAYMENT_FAILED", "PAYMENT", String.valueOf(saved.getId()), "FAILURE", e.getMessage(),
-                        safeMeta("orderId", request.getOrderId(), "amount", request.getAmount(), "paymentMethod", "WALLET", "customerId", request.getCustomerId()));
+                try {
+                    Payment saved = paymentRepository.save(payment);
+                    publishPaymentEvent(saved, "PAYMENT_FAILED", RabbitMQConfig.PAYMENT_FAILED_ROUTING_KEY);
+                    audit("PAYMENT_FAILED", "PAYMENT", String.valueOf(saved.getId()), "FAILURE", e.getMessage(),
+                            safeMeta("orderId", request.getOrderId(), "amount", request.getAmount(), "paymentMethod", "WALLET", "customerId", request.getCustomerId()));
+                } catch (Exception ignored) {}
                 throw new PaymentException("Payment error: " + e.getMessage());
             }
         } else if (request.getPaymentMethod() == PaymentMethod.COD) {

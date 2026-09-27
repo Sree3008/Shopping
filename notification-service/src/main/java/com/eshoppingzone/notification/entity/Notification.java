@@ -14,6 +14,9 @@ public class Notification {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
+    @Column(name = "recipient_role", length = 50)
+    private String recipientRole;
+
     @Column(name = "title", nullable = false, length = 200)
     private String title;
 
@@ -22,6 +25,9 @@ public class Notification {
 
     @Column(name = "type", nullable = false, length = 50)
     private String type;
+
+    @Column(name = "event_id", length = 150)
+    private String eventId;
 
     @Column(name = "is_read", nullable = false)
     private boolean isRead;
@@ -33,10 +39,20 @@ public class Notification {
     }
 
     public Notification(Long userId, String title, String message, String type) {
+        this(userId, null, title, message, type, null);
+    }
+
+    public Notification(Long userId, String recipientRole, String title, String message, String type) {
+        this(userId, recipientRole, title, message, type, null);
+    }
+
+    public Notification(Long userId, String recipientRole, String title, String message, String type, String eventId) {
         this.userId = userId;
+        this.recipientRole = recipientRole;
         this.title = title;
         this.message = message;
         this.type = type;
+        this.eventId = eventId;
         this.isRead = false;
     }
 
@@ -61,6 +77,22 @@ public class Notification {
         this.userId = userId;
     }
 
+    public Long getRecipientUserId() {
+        return userId;
+    }
+
+    public void setRecipientUserId(Long recipientUserId) {
+        this.userId = recipientUserId;
+    }
+
+    public String getRecipientRole() {
+        return recipientRole;
+    }
+
+    public void setRecipientRole(String recipientRole) {
+        this.recipientRole = recipientRole;
+    }
+
     public String getTitle() {
         return title;
     }
@@ -83,6 +115,14 @@ public class Notification {
 
     public void setType(String type) {
         this.type = type;
+    }
+
+    public String getEventId() {
+        return eventId;
+    }
+
+    public void setEventId(String eventId) {
+        this.eventId = eventId;
     }
 
     public boolean isRead() {

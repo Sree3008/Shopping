@@ -27,12 +27,14 @@ public class RabbitMQConfig {
     public static final String QUEUE_ORDER_NOTIFICATIONS = "notification.order.queue";
     public static final String QUEUE_PAYMENT_NOTIFICATIONS = "notification.payment.queue";
     public static final String QUEUE_DELIVERY_NOTIFICATIONS = "notification.delivery.queue";
+    public static final String QUEUE_PRODUCT_NOTIFICATIONS = "notification.product.queue";
 
     public static final String ROUTING_KEY_USER = "eshoppingzone.user.#";
     public static final String ROUTING_KEY_ORDER = "eshoppingzone.order.#";
     public static final String ROUTING_KEY_PAYMENT = "eshoppingzone.payment.#";
     public static final String ROUTING_KEY_REFUND = "eshoppingzone.refund.#";
     public static final String ROUTING_KEY_DELIVERY = "delivery.#";
+    public static final String ROUTING_KEY_PRODUCT = "eshoppingzone.product.#";
 
     @Bean
     public TopicExchange exchange() {
@@ -75,6 +77,11 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Queue productQueue() {
+        return new Queue(QUEUE_PRODUCT_NOTIFICATIONS, true);
+    }
+
+    @Bean
     public Binding userBinding(Queue userQueue, TopicExchange exchange) {
         return BindingBuilder.bind(userQueue).to(exchange).with(ROUTING_KEY_USER);
     }
@@ -97,6 +104,11 @@ public class RabbitMQConfig {
     @Bean
     public Binding deliveryBinding(Queue deliveryQueue, TopicExchange exchange) {
         return BindingBuilder.bind(deliveryQueue).to(exchange).with(ROUTING_KEY_DELIVERY);
+    }
+
+    @Bean
+    public Binding productBinding(Queue productQueue, TopicExchange exchange) {
+        return BindingBuilder.bind(productQueue).to(exchange).with(ROUTING_KEY_PRODUCT);
     }
 
     @Bean

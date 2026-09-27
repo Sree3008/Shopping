@@ -1,19 +1,42 @@
 package com.eshoppingzone.order.entity;
 
-import jakarta.persistence.*;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "orders",
-        uniqueConstraints = {
-                @UniqueConstraint(name = "uk_order_idempotency", columnNames = {"idempotency_key"})
-        },
-        indexes = {
-                @Index(name = "idx_orders_customer_idempotency", columnList = "customerId, idempotency_key")
-        }
+@Table(
+    name = "orders",
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "uk_order_idempotency",
+            columnNames = {"idempotency_key"}
+        )
+    },
+    indexes = {
+        @Index(
+            name = "idx_orders_customer_idempotency",
+            columnList = "customerId, idempotency_key"
+        )
+    }
 )
 public class Order {
 
@@ -54,11 +77,24 @@ public class Order {
     private String shippingPostalCode;
     private String shippingCountry;
 
-    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @OneToMany(
+        mappedBy = "order",
+        cascade = CascadeType.ALL,
+        orphanRemoval = true,
+        fetch = FetchType.EAGER
+    )
     private List<OrderItem> items = new ArrayList<>();
 
+    /**
+     * Hibernate optimistic locking version.
+     *
+     * The version must never be NULL.
+     * Existing NULL database values must be migrated to 0
+     * before this constraint is enforced at database level.
+     */
     @Version
-    private Long version;
+    @Column(nullable = false)
+    private Long version = 0L;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -72,7 +108,16 @@ public class Order {
     public Order() {
     }
 
-    public Order(Long id, String orderNumber, Long customerId, Long merchantId, BigDecimal totalAmount, OrderStatus status, PaymentMethod paymentMethod, PaymentStatus paymentStatus) {
+    public Order(
+            Long id,
+            String orderNumber,
+            Long customerId,
+            Long merchantId,
+            BigDecimal totalAmount,
+            OrderStatus status,
+            PaymentMethod paymentMethod,
+            PaymentStatus paymentStatus
+    ) {
         this.id = id;
         this.orderNumber = orderNumber;
         this.customerId = customerId;
@@ -81,14 +126,26 @@ public class Order {
         this.status = status;
         this.paymentMethod = paymentMethod;
         this.paymentStatus = paymentStatus;
+        this.version = 0L;
     }
 
     @PrePersist
     protected void onCreate() {
+
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
-        if (this.status == null) this.status = OrderStatus.PENDING_PAYMENT;
-        if (this.paymentStatus == null) this.paymentStatus = PaymentStatus.PENDING;
+
+        if (this.status == null) {
+            this.status = OrderStatus.PENDING_PAYMENT;
+        }
+
+        if (this.paymentStatus == null) {
+            this.paymentStatus = PaymentStatus.PENDING;
+        }
+
+        if (this.version == null) {
+            this.version = 0L;
+        }
     }
 
     @PreUpdate
@@ -110,6 +167,14 @@ public class Order {
 
     public void setOrderNumber(String orderNumber) {
         this.orderNumber = orderNumber;
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public void setIdempotencyKey(String idempotencyKey) {
+        this.idempotencyKey = idempotencyKey;
     }
 
     public Long getCustomerId() {
@@ -208,6 +273,14 @@ public class Order {
         this.items = items;
     }
 
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -230,21 +303,5 @@ public class Order {
 
     public void setDeliveredAt(LocalDateTime deliveredAt) {
         this.deliveredAt = deliveredAt;
-    }
-
-    public String getIdempotencyKey() {
-        return idempotencyKey;
-    }
-
-    public void setIdempotencyKey(String idempotencyKey) {
-        this.idempotencyKey = idempotencyKey;
-    }
-
-    public Long getVersion() {
-        return version;
-    }
-
-    public void setVersion(Long version) {
-        this.version = version;
     }
 }

@@ -53,11 +53,33 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     @Transactional
     public NotificationDto createNotification(Long userId, String title, String message, String type) {
-        log.info("[NOTIFICATION-SERVICE] Persisting notification for userId: {}, type: {}, title: '{}'", userId, type, title);
-        Notification notification = new Notification(userId, title, message, type);
+        return createNotification(userId, null, title, message, type, null);
+    }
+
+    @Override
+    @Transactional
+    public NotificationDto createNotification(Long userId, String recipientRole, String title, String message, String type) {
+        return createNotification(userId, recipientRole, title, message, type, null);
+    }
+
+    @Override
+    @Transactional
+    public NotificationDto createNotification(Long userId, String recipientRole, String title, String message, String type, String eventId) {
+        if (eventId != null && notificationRepository.existsByUserIdAndEventId(userId, eventId)) {
+            log.info("[NOTIFICATION-SERVICE] Idempotency check: Notification for eventId '{}' and userId {} already exists. Skipping duplicate.", eventId, userId);
+            List<Notification> existing = notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
+            return existing.stream()
+                    .filter(n -> eventId.equals(n.getEventId()))
+                    .findFirst()
+                    .map(NotificationDto::fromEntity)
+                    .orElse(null);
+        }
+
+        log.info("[NOTIFICATION-SERVICE] Persisting notification for userId: {}, role: {}, type: {}, title: '{}', eventId: '{}'", userId, recipientRole, type, title, eventId);
+        Notification notification = new Notification(userId, recipientRole, title, message, type, eventId);
         Notification saved = notificationRepository.save(notification);
         audit("NOTIFICATION_CREATED", "NOTIFICATION", String.valueOf(saved.getId()), "SUCCESS", null,
-                safeMeta("userId", userId, "type", type, "title", title));
+                safeMeta("userId", userId, "recipientRole", recipientRole, "type", type, "title", title, "eventId", eventId));
         return NotificationDto.fromEntity(saved);
     }
 

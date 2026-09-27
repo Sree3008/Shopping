@@ -165,4 +165,19 @@ class RabbitMQConfigTest {
         assertNotNull(event);
         assertEquals(new BigDecimal("899.99"), event.getTotalAmount());
     }
+
+    @Test
+    void testProductCreatedMatchesProductBinding() {
+        Queue queue = config.productQueue();
+        TopicExchange exchange = config.exchange();
+        Binding binding = config.productBinding(queue, exchange);
+
+        assertEquals("notification.product.queue", binding.getDestination());
+        assertEquals("eshoppingzone.exchange", binding.getExchange());
+        assertEquals("eshoppingzone.product.#", binding.getRoutingKey());
+
+        String publishedRoutingKey = "eshoppingzone.product.created";
+        assertTrue(matchesTopic(binding.getRoutingKey(), publishedRoutingKey),
+                "eshoppingzone.product.created should match the product binding pattern");
+    }
 }

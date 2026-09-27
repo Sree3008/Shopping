@@ -7,7 +7,7 @@ public class AuditLogDto {
     private Long id;
     private String eventId;
     private LocalDateTime timestamp;
-    private Long actorUserId;
+    private String actorUserId;
     private String actorUsername;
     private String actorRole;
     private String serviceName;
@@ -66,7 +66,7 @@ public class AuditLogDto {
         return timestamp;
     }
 
-    public Long getActorUserId() {
+    public String getActorUserId() {
         return actorUserId;
     }
 
@@ -134,3 +134,4 @@ public class AuditLogDto {
         return createdAt;
     }
 }
+

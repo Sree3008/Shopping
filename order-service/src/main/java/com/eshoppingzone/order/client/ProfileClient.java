@@ -6,7 +6,7 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 
-@FeignClient(name = "profile-service")
+@FeignClient(name = "profile-service", fallbackFactory = ProfileClientFallbackFactory.class)
 public interface ProfileClient {
 
     @GetMapping("/api/v1/profiles/addresses/{id}/internal")

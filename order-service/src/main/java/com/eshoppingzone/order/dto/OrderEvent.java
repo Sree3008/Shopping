@@ -8,6 +8,7 @@ public class OrderEvent implements Serializable {
     private Long orderId;
     private String orderNumber;
     private Long customerId;
+    private Long merchantId;
     private BigDecimal amount;
     private String status;
     private String paymentMethod;
@@ -17,10 +18,15 @@ public class OrderEvent implements Serializable {
     }
 
     public OrderEvent(String eventType, Long orderId, String orderNumber, Long customerId, BigDecimal amount, String status, String paymentMethod, String paymentStatus) {
+        this(eventType, orderId, orderNumber, customerId, null, amount, status, paymentMethod, paymentStatus);
+    }
+
+    public OrderEvent(String eventType, Long orderId, String orderNumber, Long customerId, Long merchantId, BigDecimal amount, String status, String paymentMethod, String paymentStatus) {
         this.eventType = eventType;
         this.orderId = orderId;
         this.orderNumber = orderNumber;
         this.customerId = customerId;
+        this.merchantId = merchantId;
         this.amount = amount;
         this.status = status;
         this.paymentMethod = paymentMethod;
@@ -57,6 +63,14 @@ public class OrderEvent implements Serializable {
 
     public void setCustomerId(Long customerId) {
         this.customerId = customerId;
+    }
+
+    public Long getMerchantId() {
+        return merchantId;
+    }
+
+    public void setMerchantId(Long merchantId) {
+        this.merchantId = merchantId;
     }
 
     public BigDecimal getAmount() {

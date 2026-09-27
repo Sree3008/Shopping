@@ -6,6 +6,8 @@ import com.eshoppingzone.notification.security.UserPrincipal;
 import com.eshoppingzone.notification.service.NotificationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -17,6 +19,8 @@ import java.util.List;
 @RequestMapping("/api/v1/notifications")
 @Tag(name = "Notification Management", description = "APIs for viewing user notifications and updating read status")
 public class NotificationController {
+
+    private static final Logger log = LoggerFactory.getLogger(NotificationController.class);
 
     private final NotificationService notificationService;
 
@@ -37,6 +41,7 @@ public class NotificationController {
     public ResponseEntity<ApiResponse<List<NotificationDto>>> getMyNotifications(Authentication authentication,
                                                                                  @RequestParam(required = false, defaultValue = "false") boolean unreadOnly) {
         Long userId = getUserId(authentication);
+        log.info("[NOTIFICATION-SERVICE] Authenticated user ID = {}, fetching notifications (unreadOnly={})", userId, unreadOnly);
         List<NotificationDto> notifications;
         if (unreadOnly) {
             notifications = notificationService.getMyUnreadNotifications(userId);
@@ -68,7 +73,7 @@ public class NotificationController {
     @GetMapping("/user/{userId}")
     @Operation(summary = "Get User Notifications (Admin)", description = "Admin views notification log for any specific user")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<List<NotificationDto>>> getUserNotifications(@PathVariable Long userId) {
+    public ResponseEntity<ApiResponse<List<NotificationDto>>> getUserNotifications(@PathVariable("userId") Long userId) {
         List<NotificationDto> notifications = notificationService.getUserNotifications(userId);
         return ResponseEntity.ok(ApiResponse.success("User notifications retrieved successfully", notifications));
     }

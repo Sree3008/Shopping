@@ -9,7 +9,8 @@ public class OrderEvent {
     private String eventType;
     private Long orderId;
     private Long customerId;
-    @JsonAlias({"amount", "totalAmount"})
+    private Long merchantId;
+    @JsonAlias({"amount", "totalAmount", "refundAmount"})
     private BigDecimal totalAmount;
     private String paymentMethod;
     private String status;
@@ -40,6 +41,14 @@ public class OrderEvent {
 
     public void setCustomerId(Long customerId) {
         this.customerId = customerId;
+    }
+
+    public Long getMerchantId() {
+        return merchantId;
+    }
+
+    public void setMerchantId(Long merchantId) {
+        this.merchantId = merchantId;
     }
 
     public BigDecimal getTotalAmount() {

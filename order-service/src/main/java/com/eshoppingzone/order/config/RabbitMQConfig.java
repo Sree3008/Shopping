@@ -27,6 +27,21 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public TopicExchange auditExchange() {
+        return new TopicExchange("audit.exchange");
+    }
+
+    @Bean
+    public org.springframework.amqp.core.Queue auditQueue() {
+        return new org.springframework.amqp.core.Queue("audit.queue", true);
+    }
+
+    @Bean
+    public org.springframework.amqp.core.Binding auditBinding(org.springframework.amqp.core.Queue auditQueue, TopicExchange auditExchange) {
+        return org.springframework.amqp.core.BindingBuilder.bind(auditQueue).to(auditExchange).with("audit.#");
+    }
+
+    @Bean
     public MessageConverter jsonMessageConverter() {
         return new Jackson2JsonMessageConverter();
     }

@@ -10,8 +10,7 @@ import java.util.List;
 
 public class AuditLogSpecification {
 
-    public static Specification<AuditLog> filter(
-            Long actorUserId,
+    public static Specification<AuditLog> filter(String actorUserId,
             String action,
             String resourceType,
             String resourceId,
@@ -56,3 +55,4 @@ public class AuditLogSpecification {
         };
     }
 }
+

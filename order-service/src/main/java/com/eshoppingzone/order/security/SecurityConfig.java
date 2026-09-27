@@ -74,7 +74,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/v1/orders/*/internal",
                                 "/api/v1/orders/*/status/internal"
-                        ).hasAnyRole("INTERNAL", "ADMIN")
+                        ).hasAnyRole("INTERNAL", "ADMIN", "DELIVERY", "DELIVERY_AGENT", "DELIVERY_PARTNER")
                         .requestMatchers("/api/v1/audit-logs/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )

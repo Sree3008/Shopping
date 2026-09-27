@@ -102,6 +102,8 @@ public class DeliveryServiceTest {
 
     @Test
     void testUpdateDeliveryStatusOutForDelivery() {
+        mockDelivery.setStatus(DeliveryStatus.PICKED_UP);
+        mockDelivery.setPickedUpAt(LocalDateTime.now());
         UpdateDeliveryStatusRequest request = new UpdateDeliveryStatusRequest("OUT_FOR_DELIVERY", null);
 
         when(deliveryRepository.findById(1L)).thenReturn(Optional.of(mockDelivery));
@@ -118,6 +120,7 @@ public class DeliveryServiceTest {
     @Test
     void testUpdateDeliveryStatusDelivered() {
         mockDelivery.setStatus(DeliveryStatus.OUT_FOR_DELIVERY);
+        mockDelivery.setPickedUpAt(LocalDateTime.now());
         UpdateDeliveryStatusRequest request = new UpdateDeliveryStatusRequest("DELIVERED", null);
 
         when(deliveryRepository.findById(1L)).thenReturn(Optional.of(mockDelivery));

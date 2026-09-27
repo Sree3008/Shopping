@@ -15,8 +15,9 @@ public class InternalFeignRequestInterceptor implements RequestInterceptor {
 
     @Override
     public void apply(RequestTemplate template) {
-        if (!template.headers().containsKey("Authorization")) {
-            template.header("Authorization", "Bearer " + internalTokenService.generateInternalToken());
+        if (template.headers().containsKey("Authorization")) {
+            template.removeHeader("Authorization");
         }
+        template.header("Authorization", "Bearer " + internalTokenService.generateInternalToken());
     }
 }

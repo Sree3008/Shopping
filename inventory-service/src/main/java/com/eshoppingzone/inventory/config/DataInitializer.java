@@ -24,6 +24,7 @@ public class DataInitializer implements CommandLineRunner {
         seedStock(2L, 75);
         seedStock(3L, 100);
         seedStock(4L, 40);
+        seedStock(5L, 60);
     }
 
     private void seedStock(Long productId, int quantity) {

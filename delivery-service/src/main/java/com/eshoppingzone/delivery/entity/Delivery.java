@@ -20,6 +20,9 @@ public class Delivery {
     @Column(name = "delivery_agent_id")
     private Long deliveryAgentId;
 
+    @Column(name = "assigned_by_admin_id")
+    private Long assignedByAdminId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private DeliveryStatus status;
@@ -44,6 +47,9 @@ public class Delivery {
 
     @Column(name = "failure_reason", length = 500)
     private String failureReason;
+
+    @Version
+    private Long version;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -106,6 +112,14 @@ public class Delivery {
 
     public void setDeliveryAgentId(Long deliveryAgentId) {
         this.deliveryAgentId = deliveryAgentId;
+    }
+
+    public Long getAssignedByAdminId() {
+        return assignedByAdminId;
+    }
+
+    public void setAssignedByAdminId(Long assignedByAdminId) {
+        this.assignedByAdminId = assignedByAdminId;
     }
 
     public DeliveryStatus getStatus() {

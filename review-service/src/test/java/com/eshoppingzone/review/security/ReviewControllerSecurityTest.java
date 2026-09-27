@@ -182,6 +182,15 @@ class ReviewControllerSecurityTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    // 7b. Admin API invalid token rejected
+    @Test
+    @DisplayName("7b. Admin API invalid JWT is rejected with 401 Unauthorized")
+    void testAdminInvalidJwtRejected() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/reviews")
+                        .header("Authorization", "Bearer invalid.token.value"))
+                .andExpect(status().isUnauthorized());
+    }
+
     // 8. Invalid JWT rejected
     @Test
     @DisplayName("8. Invalid JWT is rejected with 401 Unauthorized")

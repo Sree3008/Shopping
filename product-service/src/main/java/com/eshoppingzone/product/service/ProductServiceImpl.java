@@ -28,6 +28,9 @@ public class ProductServiceImpl implements ProductService {
     private final CategoryRepository categoryRepository;
 
     @Autowired(required = false)
+    private org.springframework.amqp.rabbit.core.RabbitTemplate rabbitTemplate;
+
+    @Autowired(required = false)
     private com.eshoppingzone.product.audit.service.AuditLogService auditLogService;
 
     // FIX: @Autowired added here
@@ -64,7 +67,7 @@ public class ProductServiceImpl implements ProductService {
                         outcome,
                         failureReason,
                         metadata,
-                        actorUserId,
+                        actorUserId != null ? String.valueOf(actorUserId) : null,
                         null,
                         actorRole,
                         null
@@ -225,6 +228,19 @@ public class ProductServiceImpl implements ProductService {
                 "MERCHANT"
         );
 
+        if (rabbitTemplate != null) {
+            try {
+                com.eshoppingzone.product.dto.ProductEvent event = new com.eshoppingzone.product.dto.ProductEvent(
+                        "PRODUCT_CREATED", saved.getId(), saved.getName(), merchantId
+                );
+                org.springframework.amqp.rabbit.connection.CorrelationData correlationData =
+                        new org.springframework.amqp.rabbit.connection.CorrelationData("product-created-" + saved.getId());
+                rabbitTemplate.convertAndSend("eshoppingzone.exchange", "eshoppingzone.product.created", event, correlationData);
+            } catch (Exception e) {
+                // Non-blocking event publish log
+            }
+        }
+
         return ProductDto.fromEntity(saved);
     }
 
@@ -286,6 +302,19 @@ public class ProductServiceImpl implements ProductService {
                 merchantId,
                 "MERCHANT"
         );
+
+        if (rabbitTemplate != null) {
+            try {
+                com.eshoppingzone.product.dto.ProductEvent event = new com.eshoppingzone.product.dto.ProductEvent(
+                        "PRODUCT_UPDATED", updated.getId(), updated.getName(), merchantId
+                );
+                org.springframework.amqp.rabbit.connection.CorrelationData correlationData =
+                        new org.springframework.amqp.rabbit.connection.CorrelationData("product-updated-" + updated.getId());
+                rabbitTemplate.convertAndSend("eshoppingzone.exchange", "eshoppingzone.product.updated", event, correlationData);
+            } catch (Exception e) {
+                // Non-blocking event publish log
+            }
+        }
 
         return ProductDto.fromEntity(updated);
     }
@@ -389,6 +418,19 @@ public class ProductServiceImpl implements ProductService {
                 "ADMIN"
         );
 
+        if (rabbitTemplate != null) {
+            try {
+                com.eshoppingzone.product.dto.ProductEvent event = new com.eshoppingzone.product.dto.ProductEvent(
+                        "PRODUCT_APPROVED", saved.getId(), saved.getName(), saved.getMerchantId()
+                );
+                org.springframework.amqp.rabbit.connection.CorrelationData correlationData =
+                        new org.springframework.amqp.rabbit.connection.CorrelationData("product-approved-" + saved.getId());
+                rabbitTemplate.convertAndSend("eshoppingzone.exchange", "eshoppingzone.product.approved", event, correlationData);
+            } catch (Exception e) {
+                // Non-blocking event publish log
+            }
+        }
+
         return ProductDto.fromEntity(saved);
     }
 
@@ -419,6 +461,19 @@ public class ProductServiceImpl implements ProductService {
                 null,
                 "ADMIN"
         );
+
+        if (rabbitTemplate != null) {
+            try {
+                com.eshoppingzone.product.dto.ProductEvent event = new com.eshoppingzone.product.dto.ProductEvent(
+                        "PRODUCT_REJECTED", saved.getId(), saved.getName(), saved.getMerchantId()
+                );
+                org.springframework.amqp.rabbit.connection.CorrelationData correlationData =
+                        new org.springframework.amqp.rabbit.connection.CorrelationData("product-rejected-" + saved.getId());
+                rabbitTemplate.convertAndSend("eshoppingzone.exchange", "eshoppingzone.product.rejected", event, correlationData);
+            } catch (Exception e) {
+                // Non-blocking event publish log
+            }
+        }
 
         return ProductDto.fromEntity(saved);
     }

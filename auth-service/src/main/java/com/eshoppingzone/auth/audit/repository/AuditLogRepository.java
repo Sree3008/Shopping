@@ -12,9 +12,10 @@ import java.util.Optional;
 @Repository
 public interface AuditLogRepository extends JpaRepository<AuditLog, Long>, JpaSpecificationExecutor<AuditLog> {
 
-    Page<AuditLog> findByActorUserId(Long actorUserId, Pageable pageable);
+    Page<AuditLog> findByActorUserId(String actorUserId, Pageable pageable);
 
     Page<AuditLog> findByResourceTypeAndResourceId(String resourceType, String resourceId, Pageable pageable);
 
     Optional<AuditLog> findByEventId(String eventId);
 }
+

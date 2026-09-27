@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 
 public class LogoutRequest {
 
-    @NotBlank(message = "Refresh token is required")
+    @jakarta.validation.constraints.NotNull(message = "Refresh token is required")
     private String refreshToken;
 
     public LogoutRequest() {

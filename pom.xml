@@ -50,6 +50,7 @@
         <module>notification-service</module>
         <module>recommendation-service</module>
         <module>review-service</module>
+        <module>settlement-service</module>
     </modules>
 
     <dependencyManagement>

@@ -68,7 +68,7 @@ public class ProfileServiceImpl implements ProfileService {
                         outcome,
                         failureReason,
                         metadata,
-                        actorUserId,
+                        actorUserId != null ? String.valueOf(actorUserId) : null,
                         null,
                         null,
                         null

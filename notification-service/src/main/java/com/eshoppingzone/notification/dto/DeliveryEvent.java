@@ -9,6 +9,7 @@ public class DeliveryEvent {
     private Long orderId;
     private Long customerId;
     private Long deliveryAgentId;
+    private Long assignedByAdminId;
     private String status;
     private String failureReason;
     private LocalDateTime timestamp;
@@ -54,6 +55,14 @@ public class DeliveryEvent {
 
     public void setDeliveryAgentId(Long deliveryAgentId) {
         this.deliveryAgentId = deliveryAgentId;
+    }
+
+    public Long getAssignedByAdminId() {
+        return assignedByAdminId;
+    }
+
+    public void setAssignedByAdminId(Long assignedByAdminId) {
+        this.assignedByAdminId = assignedByAdminId;
     }
 
     public String getStatus() {

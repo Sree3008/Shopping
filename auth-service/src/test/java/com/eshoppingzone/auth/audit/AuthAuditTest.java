@@ -113,7 +113,7 @@ class AuthAuditTest {
         assertEquals("AUTH_SERVICE", log.getServiceName());
         assertEquals("USER", log.getResourceType());
         assertEquals("101", log.getResourceId());
-        assertEquals(101L, log.getActorUserId());
+        assertEquals("101", log.getActorUserId());
         assertEquals("testcustomer", log.getActorUsername());
         assertNotNull(log.getEventId());
         assertNotNull(log.getTimestamp());
@@ -171,7 +171,7 @@ class AuthAuditTest {
         assertEquals("USER_REGISTERED", log.getAction());
         assertEquals("SUCCESS", log.getOutcome());
         assertEquals("202", log.getResourceId());
-        assertEquals(202L, log.getActorUserId());
+        assertEquals("202", log.getActorUserId());
         assertFalse(log.getMetadata().contains("secretPassword123"));
     }
 
@@ -202,8 +202,7 @@ class AuthAuditTest {
         Page<AuditLog> pagedResult = new PageImpl<>(List.of(auditLog));
         when(auditLogRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(pagedResult);
 
-        ResponseEntity<?> response = auditLogController.searchAuditLogs(
-                101L, "LOGIN_SUCCESS", "USER", "101", "AUTH_SERVICE", "SUCCESS", null, null, null, 0, 20, "timestamp", "desc"
+        ResponseEntity<?> response = auditLogController.searchAuditLogs("101", "LOGIN_SUCCESS", "USER", "101", "AUTH_SERVICE", "SUCCESS", null, null, null, 0, 20, "timestamp", "desc"
         );
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -235,8 +234,7 @@ class AuthAuditTest {
 
         AuditLog saved = auditLogService.log(
                 "TEST_ACTION", "TEST_RESOURCE", "1", "SUCCESS", null,
-                Map.of("password", "superSecret123", "jwtToken", "eyJhbGciOi...", "amount", 50.0),
-                101L, "admin", "ADMIN", null
+                Map.of("password", "superSecret123", "jwtToken", "eyJhbGciOi...", "amount", 50.0), "101", "admin", "ADMIN", null
         );
 
         assertNotNull(saved);
@@ -247,3 +245,7 @@ class AuthAuditTest {
         assertTrue(saved.getMetadata().contains("50.0"));
     }
 }
+
+
+
+

@@ -145,6 +145,8 @@ public class SagaRecoveryScheduler {
                     } catch (Exception ex) {
                         log.warn("Inventory confirm error in recovery for Saga [{}]: {}", saga.getSagaId(), ex.getMessage());
                         saga.setStatus(SagaStatus.INVENTORY_CONFIRMATION_FAILED);
+                        sagaStateRepository.save(saga);
+                        return;
                     }
 
                     // Forward step 4: clear cart
@@ -155,6 +157,8 @@ public class SagaRecoveryScheduler {
                     } catch (Exception ex) {
                         log.warn("Cart clear error in recovery for Saga [{}]: {}", saga.getSagaId(), ex.getMessage());
                         saga.setStatus(SagaStatus.CART_CLEAR_FAILED);
+                        sagaStateRepository.save(saga);
+                        return;
                     }
 
                     // Finalize
@@ -179,6 +183,8 @@ public class SagaRecoveryScheduler {
                         inventoryClient.releaseStock(stockReq);
                     } catch (Exception ex) {
                         log.warn("Inventory release error in recovery for Saga [{}]: {}", saga.getSagaId(), ex.getMessage());
+                        sagaStateRepository.save(saga);
+                        return;
                     }
                     saga.setStatus(SagaStatus.COMPENSATED);
                     saga.addCompletedStep(SagaStep.COMPENSATE_INVENTORY);
@@ -206,25 +212,43 @@ public class SagaRecoveryScheduler {
         StockReservationRequest stockReq = createReservationRequest(order);
         try {
             inventoryClient.confirmStock(stockReq);
+            saga.setStatus(SagaStatus.INVENTORY_CONFIRMED);
             saga.addCompletedStep(SagaStep.CONFIRM_INVENTORY);
-            saga.setStatus(SagaStatus.COMPLETED);
             sagaStateRepository.save(saga);
             log.info("Saga [{}] successfully confirmed inventory on retry", saga.getSagaId());
         } catch (Exception e) {
             log.warn("Saga [{}] inventory confirmation retry failed: {}", saga.getSagaId(), e.getMessage());
+            return;
         }
+        
+        try {
+            cartClient.clearCustomerCart(order.getCustomerId());
+            saga.setStatus(SagaStatus.CART_CLEARED);
+            saga.addCompletedStep(SagaStep.CLEAR_CART);
+            sagaStateRepository.save(saga);
+        } catch (Exception ex) {
+            log.warn("Cart clear error in recovery for Saga [{}]: {}", saga.getSagaId(), ex.getMessage());
+            saga.setStatus(SagaStatus.CART_CLEAR_FAILED);
+            sagaStateRepository.save(saga);
+            return;
+        }
+        
+        finalizeSuccessfulOrder(saga, order);
     }
 
     private void retryCartClear(OrderSagaState saga, Order order) {
         try {
             cartClient.clearCustomerCart(order.getCustomerId());
+            saga.setStatus(SagaStatus.CART_CLEARED);
             saga.addCompletedStep(SagaStep.CLEAR_CART);
-            saga.setStatus(SagaStatus.COMPLETED);
             sagaStateRepository.save(saga);
             log.info("Saga [{}] successfully cleared cart on retry", saga.getSagaId());
         } catch (Exception e) {
             log.warn("Saga [{}] cart clear retry failed: {}", saga.getSagaId(), e.getMessage());
+            return;
         }
+        
+        finalizeSuccessfulOrder(saga, order);
     }
 
     private void retryCompensation(OrderSagaState saga, Order order) {
@@ -232,12 +256,34 @@ public class SagaRecoveryScheduler {
         try {
             inventoryClient.releaseStock(stockReq);
             saga.setStatus(SagaStatus.COMPENSATED);
+            saga.addCompletedStep(SagaStep.COMPENSATE_INVENTORY);
             saga.setStatus(SagaStatus.FAILED);
+            saga.setFailureStep(SagaStep.PROCESS_PAYMENT.name());
+            saga.setFailureReason("Payment failed");
             sagaStateRepository.save(saga);
             log.info("Saga [{}] compensation successfully finished on retry", saga.getSagaId());
+            
+            order.setStatus(OrderStatus.FAILED);
+            order.setPaymentStatus(PaymentStatus.FAILED);
+            orderRepository.save(order);
+            publishOrderEvent(order, "ORDER_FAILED", RabbitMQConfig.ORDER_STATUS_ROUTING_KEY);
         } catch (Exception e) {
             log.warn("Saga [{}] compensation retry failed: {}", saga.getSagaId(), e.getMessage());
         }
+    }
+
+    private void finalizeSuccessfulOrder(OrderSagaState saga, Order order) {
+        order.setStatus(OrderStatus.CONFIRMED);
+        order.setPaymentStatus(PaymentStatus.SUCCESS);
+        orderRepository.save(order);
+
+        saga.setStatus(SagaStatus.COMPLETED);
+        saga.setCurrentStep(SagaStep.FINALIZE_ORDER);
+        saga.addCompletedStep(SagaStep.FINALIZE_ORDER);
+        sagaStateRepository.save(saga);
+
+        publishOrderEvent(order, "ORDER_CONFIRMED", RabbitMQConfig.ORDER_CONFIRMED_ROUTING_KEY);
+        log.info("Saga [{}] successfully recovered and COMPLETED", saga.getSagaId());
     }
 
     private StockReservationRequest createReservationRequest(Order order) {
@@ -254,6 +300,7 @@ public class SagaRecoveryScheduler {
                     order.getId(),
                     order.getOrderNumber(),
                     order.getCustomerId(),
+                    order.getMerchantId(),
                     order.getTotalAmount(),
                     order.getStatus() != null ? order.getStatus().name() : "UNKNOWN",
                     order.getPaymentMethod() != null ? order.getPaymentMethod().name() : "UNKNOWN",

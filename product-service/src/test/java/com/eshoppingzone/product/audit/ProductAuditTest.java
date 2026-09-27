@@ -101,7 +101,7 @@ class ProductAuditTest {
         assertEquals("PRODUCT_CREATED", log.getAction());
         assertEquals("PRODUCT", log.getResourceType());
         assertEquals("10", log.getResourceId());
-        assertEquals(50L, log.getActorUserId());
+        assertEquals("50", log.getActorUserId());
         assertEquals("SUCCESS", log.getOutcome());
         assertEquals("PRODUCT_SERVICE", log.getServiceName());
     }
@@ -130,7 +130,7 @@ class ProductAuditTest {
         assertEquals("PRODUCT_UPDATED", log.getAction());
         assertEquals("PRODUCT", log.getResourceType());
         assertEquals("10", log.getResourceId());
-        assertEquals(50L, log.getActorUserId());
+        assertEquals("50", log.getActorUserId());
         assertEquals("SUCCESS", log.getOutcome());
     }
 
@@ -197,11 +197,13 @@ class ProductAuditTest {
         Page<AuditLog> paged = new PageImpl<>(List.of(auditLog));
         when(auditLogRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(paged);
 
-        ResponseEntity<?> response = auditLogController.searchAuditLogs(
-                50L, "PRODUCT_CREATED", "PRODUCT", "10", "PRODUCT_SERVICE", "SUCCESS", null, null, null, 0, 20, "timestamp", "desc"
+        ResponseEntity<?> response = auditLogController.searchAuditLogs("101", "PRODUCT_CREATED", "PRODUCT", "10", "PRODUCT_SERVICE", "SUCCESS", null, null, null, 0, 20, "timestamp", "desc"
         );
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
     }
 }
+
+
+

@@ -445,18 +445,76 @@ public class OrderServiceImpl implements OrderService {
         return OrderDto.fromEntity(order);
     }
 
+    private void validateOrderTransition(Order order, OrderStatus target) {
+        OrderStatus current = order.getStatus();
+        if (current == null || target == null) {
+            throw new InvalidOrderStateException("Order status transition cannot be null");
+        }
+
+        if (order.getPaymentMethod() == PaymentMethod.WALLET && order.getPaymentStatus() == PaymentStatus.FAILED) {
+            if (target == OrderStatus.PROCESSING || target == OrderStatus.READY_FOR_DELIVERY 
+                    || target == OrderStatus.ASSIGNED || target == OrderStatus.OUT_FOR_DELIVERY 
+                    || target == OrderStatus.DELIVERED) {
+                throw new InvalidOrderStateException("Cannot transition to " + target + " when payment is FAILED for prepaid orders.");
+            }
+        }
+
+        boolean valid = switch (current) {
+            case PENDING_PAYMENT -> target == OrderStatus.CONFIRMED || target == OrderStatus.CANCELLED || target == OrderStatus.FAILED;
+            case CONFIRMED -> target == OrderStatus.PROCESSING || target == OrderStatus.READY_FOR_DELIVERY || target == OrderStatus.ASSIGNED || target == OrderStatus.OUT_FOR_DELIVERY || target == OrderStatus.CANCELLED || target == OrderStatus.FAILED;
+            case PROCESSING -> target == OrderStatus.READY_FOR_DELIVERY || target == OrderStatus.ASSIGNED || target == OrderStatus.OUT_FOR_DELIVERY || target == OrderStatus.CANCELLED || target == OrderStatus.FAILED;
+            case READY_FOR_DELIVERY -> target == OrderStatus.ASSIGNED || target == OrderStatus.OUT_FOR_DELIVERY || target == OrderStatus.CANCELLED || target == OrderStatus.FAILED;
+            case ASSIGNED -> target == OrderStatus.OUT_FOR_DELIVERY || target == OrderStatus.CANCELLED || target == OrderStatus.FAILED;
+            case OUT_FOR_DELIVERY -> target == OrderStatus.DELIVERED || target == OrderStatus.FAILED || target == OrderStatus.CANCELLED;
+            case DELIVERED -> target == OrderStatus.RETURN_REQUESTED || target == OrderStatus.REFUNDED;
+            case RETURN_REQUESTED -> target == OrderStatus.RETURNED || target == OrderStatus.REFUNDED;
+            case RETURNED -> target == OrderStatus.REFUNDED;
+            case CANCELLED, FAILED, REFUNDED -> false;
+        };
+
+        if (!valid) {
+            throw new InvalidOrderStateException("Invalid order state transition from " + current + " to " + target);
+        }
+    }
+
+    private boolean isAdministrativeStatusOverride(Order order, OrderStatus target) {
+        if (target != OrderStatus.DELIVERED) {
+            return false;
+        }
+
+        if (order.getPaymentMethod() == PaymentMethod.WALLET && order.getPaymentStatus() == PaymentStatus.FAILED) {
+            return false;
+        }
+
+        return switch (order.getStatus()) {
+            case CONFIRMED, PROCESSING, READY_FOR_DELIVERY, ASSIGNED, OUT_FOR_DELIVERY -> true;
+            default -> false;
+        };
+    }
+
     @Override
     @Transactional
     public OrderDto cancelOrder(Long orderId, Long customerId, String reason) {
         Order order = orderRepository.findByIdAndCustomerId(orderId, customerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + orderId));
 
-        if (order.getStatus() != OrderStatus.PENDING_PAYMENT && order.getStatus() != OrderStatus.CONFIRMED) {
-            throw new InvalidOrderStateException("Order cannot be cancelled in current state: " + order.getStatus());
-        }
+        validateOrderTransition(order, OrderStatus.CANCELLED);
 
         OrderStatus oldStatus = order.getStatus();
         order.setStatus(OrderStatus.CANCELLED);
+        if (order.getPaymentStatus() == PaymentStatus.SUCCESS) {
+            order.setPaymentStatus(PaymentStatus.REFUNDED);
+            if (order.getPaymentMethod() == PaymentMethod.WALLET) {
+                try {
+                    com.eshoppingzone.order.returns.dto.RefundRequestDto refundReq = new com.eshoppingzone.order.returns.dto.RefundRequestDto(
+                            order.getId(), order.getTotalAmount(), "Order Cancellation"
+                    );
+                    paymentClient.requestRefundInternal(refundReq);
+                } catch (Exception e) {
+                    log.warn("Failed to process wallet refund on order cancellation: {}", e.getMessage());
+                }
+            }
+        }
         orderRepository.save(order);
 
         auditLog("ORDER_CANCELLED", "ORDER", String.valueOf(orderId), "SUCCESS", null,
@@ -533,9 +591,7 @@ public class OrderServiceImpl implements OrderService {
         Order order = orderRepository.findByIdAndMerchantId(orderId, merchantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + orderId));
 
-        if (order.getStatus() != OrderStatus.CONFIRMED) {
-            throw new InvalidOrderStateException("Only CONFIRMED orders can be processed. Current status: " + order.getStatus());
-        }
+        validateOrderTransition(order, OrderStatus.PROCESSING);
 
         order.setStatus(OrderStatus.PROCESSING);
         Order saved = orderRepository.save(order);
@@ -549,9 +605,7 @@ public class OrderServiceImpl implements OrderService {
         Order order = orderRepository.findByIdAndMerchantId(orderId, merchantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + orderId));
 
-        if (order.getStatus() != OrderStatus.PROCESSING) {
-            throw new InvalidOrderStateException("Only PROCESSING orders can be marked READY_FOR_DELIVERY");
-        }
+        validateOrderTransition(order, OrderStatus.READY_FOR_DELIVERY);
 
         order.setStatus(OrderStatus.READY_FOR_DELIVERY);
         Order saved = orderRepository.save(order);
@@ -565,11 +619,12 @@ public class OrderServiceImpl implements OrderService {
         Order order = orderRepository.findByIdAndMerchantId(orderId, merchantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + orderId));
 
-        if (order.getStatus() != OrderStatus.CONFIRMED && order.getStatus() != OrderStatus.PROCESSING) {
-            throw new InvalidOrderStateException("Order cannot be rejected in status: " + order.getStatus());
-        }
+        validateOrderTransition(order, OrderStatus.CANCELLED);
 
         order.setStatus(OrderStatus.CANCELLED);
+        if (order.getPaymentStatus() == PaymentStatus.SUCCESS) {
+            order.setPaymentStatus(PaymentStatus.REFUNDED);
+        }
         Order saved = orderRepository.save(order);
 
         // Release stock
@@ -597,16 +652,27 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderDto updateOrderStatusAdmin(Long orderId, OrderStatus status) {
+        if (status == OrderStatus.RETURN_REQUESTED) {
+            throw new InvalidOrderStateException("Cannot manually transition to RETURN_REQUESTED. Use Return APIs to initiate a return.");
+        }
+
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + orderId));
 
         OrderStatus oldStatus = order.getStatus();
+        if (!isAdministrativeStatusOverride(order, status)) {
+            validateOrderTransition(order, status);
+        }
         order.setStatus(status);
         if (status == OrderStatus.DELIVERED) {
             order.setDeliveredAt(LocalDateTime.now());
             if (order.getPaymentMethod() == PaymentMethod.COD) {
                 order.setPaymentStatus(PaymentStatus.SUCCESS);
             }
+        } else if (status == OrderStatus.REFUNDED) {
+            order.setPaymentStatus(PaymentStatus.REFUNDED);
+        } else if (status == OrderStatus.CANCELLED && order.getPaymentStatus() == PaymentStatus.SUCCESS) {
+            order.setPaymentStatus(PaymentStatus.REFUNDED);
         }
 
         Order saved = orderRepository.save(order);
@@ -624,16 +690,27 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderDto updateOrderStatusInternal(Long orderId, OrderStatus status) {
+        if (status == OrderStatus.RETURN_REQUESTED) {
+            throw new InvalidOrderStateException("Cannot manually transition to RETURN_REQUESTED. Use Return APIs to initiate a return.");
+        }
+
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + orderId));
 
         OrderStatus oldStatus = order.getStatus();
+        if (!isAdministrativeStatusOverride(order, status)) {
+            validateOrderTransition(order, status);
+        }
         order.setStatus(status);
         if (status == OrderStatus.DELIVERED) {
             order.setDeliveredAt(LocalDateTime.now());
             if (order.getPaymentMethod() == PaymentMethod.COD) {
                 order.setPaymentStatus(PaymentStatus.SUCCESS);
             }
+        } else if (status == OrderStatus.REFUNDED) {
+            order.setPaymentStatus(PaymentStatus.REFUNDED);
+        } else if (status == OrderStatus.CANCELLED && order.getPaymentStatus() == PaymentStatus.SUCCESS) {
+            order.setPaymentStatus(PaymentStatus.REFUNDED);
         }
 
         Order saved = orderRepository.save(order);
@@ -663,10 +740,11 @@ public class OrderServiceImpl implements OrderService {
                     order.getId(),
                     order.getOrderNumber(),
                     order.getCustomerId(),
+                    order.getMerchantId(),
                     order.getTotalAmount(),
                     order.getStatus().name(),
-                    order.getPaymentMethod().name(),
-                    order.getPaymentStatus().name()
+                    order.getPaymentMethod() != null ? order.getPaymentMethod().name() : null,
+                    order.getPaymentStatus() != null ? order.getPaymentStatus().name() : null
             );
             CorrelationData correlationData = new CorrelationData("order-" + order.getId() + "-" + eventType);
             rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE_NAME, routingKey, event, correlationData);

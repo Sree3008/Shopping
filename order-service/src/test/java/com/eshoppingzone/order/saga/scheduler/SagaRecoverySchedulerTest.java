@@ -82,7 +82,7 @@ class SagaRecoverySchedulerTest {
         assertEquals(OrderStatus.CONFIRMED, sampleOrder.getStatus());
         assertEquals(PaymentStatus.SUCCESS, sampleOrder.getPaymentStatus());
         verify(orderRepository).save(sampleOrder);
-        verify(sagaStateRepository).save(saga);
+        verify(sagaStateRepository, atLeastOnce()).save(saga);
     }
 
     @Test
@@ -100,7 +100,7 @@ class SagaRecoverySchedulerTest {
         assertEquals(OrderStatus.FAILED, sampleOrder.getStatus());
         verify(inventoryClient, times(1)).releaseStock(any());
         verify(orderRepository).save(sampleOrder);
-        verify(sagaStateRepository).save(saga);
+        verify(sagaStateRepository, atLeastOnce()).save(saga);
     }
 
     @Test
@@ -132,7 +132,7 @@ class SagaRecoverySchedulerTest {
 
         assertEquals(SagaStatus.COMPLETED, saga.getStatus());
         verify(inventoryClient, times(1)).confirmStock(any());
-        verify(sagaStateRepository).save(saga);
+        verify(sagaStateRepository, atLeastOnce()).save(saga);
     }
 
     @Test
@@ -147,6 +147,6 @@ class SagaRecoverySchedulerTest {
 
         assertEquals(SagaStatus.COMPLETED, saga.getStatus());
         verify(cartClient, times(1)).clearCustomerCart(100L);
-        verify(sagaStateRepository).save(saga);
+        verify(sagaStateRepository, atLeastOnce()).save(saga);
     }
 }

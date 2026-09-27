@@ -39,10 +39,11 @@ public class UserRegisteredEventListener {
                 try {
                     auditLogService.log("PROFILE_CREATED", "PROFILE", String.valueOf(event.getUserId()), "SUCCESS", null,
                             java.util.Map.of("userId", event.getUserId(), "username", event.getUsername()),
-                            event.getUserId(), event.getUsername(), "CUSTOMER", null);
+                            String.valueOf(event.getUserId()), event.getUsername(), "CUSTOMER", null);
                 } catch (Exception ignored) {
                 }
             }
         }
     }
 }
+

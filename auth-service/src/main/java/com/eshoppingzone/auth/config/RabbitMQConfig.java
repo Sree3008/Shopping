@@ -22,6 +22,10 @@ public class RabbitMQConfig {
     public static final String USER_REGISTERED_QUEUE = "eshoppingzone.user.registered.queue";
     public static final String USER_REGISTERED_ROUTING_KEY = "eshoppingzone.user.registered";
 
+    public static final String AUDIT_EXCHANGE_NAME = "audit.exchange";
+    public static final String AUDIT_QUEUE = "eshoppingzone.audit.queue";
+    public static final String AUDIT_ROUTING_KEY = "audit.#";
+
     @Bean
     public TopicExchange exchange() {
         return new TopicExchange(EXCHANGE_NAME);
@@ -35,6 +39,21 @@ public class RabbitMQConfig {
     @Bean
     public Binding userRegisteredBinding(Queue userRegisteredQueue, TopicExchange exchange) {
         return BindingBuilder.bind(userRegisteredQueue).to(exchange).with(USER_REGISTERED_ROUTING_KEY);
+    }
+
+    @Bean
+    public TopicExchange auditExchange() {
+        return new TopicExchange(AUDIT_EXCHANGE_NAME);
+    }
+
+    @Bean
+    public Queue auditQueue() {
+        return new Queue(AUDIT_QUEUE, true);
+    }
+
+    @Bean
+    public Binding auditBinding(Queue auditQueue, TopicExchange auditExchange) {
+        return BindingBuilder.bind(auditQueue).to(auditExchange).with(AUDIT_ROUTING_KEY);
     }
 
     @Bean

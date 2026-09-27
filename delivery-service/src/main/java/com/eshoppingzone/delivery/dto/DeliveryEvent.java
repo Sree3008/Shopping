@@ -9,6 +9,7 @@ public class DeliveryEvent {
     private Long orderId;
     private Long customerId;
     private Long deliveryAgentId;
+    private Long assignedByAdminId;
     private String status;
     private String failureReason;
     private LocalDateTime timestamp;
@@ -18,11 +19,16 @@ public class DeliveryEvent {
     }
 
     public DeliveryEvent(String eventType, Long deliveryId, Long orderId, Long customerId, Long deliveryAgentId, String status, String failureReason) {
+        this(eventType, deliveryId, orderId, customerId, deliveryAgentId, null, status, failureReason);
+    }
+
+    public DeliveryEvent(String eventType, Long deliveryId, Long orderId, Long customerId, Long deliveryAgentId, Long assignedByAdminId, String status, String failureReason) {
         this.eventType = eventType;
         this.deliveryId = deliveryId;
         this.orderId = orderId;
         this.customerId = customerId;
         this.deliveryAgentId = deliveryAgentId;
+        this.assignedByAdminId = assignedByAdminId;
         this.status = status;
         this.failureReason = failureReason;
         this.timestamp = LocalDateTime.now();
@@ -66,6 +72,14 @@ public class DeliveryEvent {
 
     public void setDeliveryAgentId(Long deliveryAgentId) {
         this.deliveryAgentId = deliveryAgentId;
+    }
+
+    public Long getAssignedByAdminId() {
+        return assignedByAdminId;
+    }
+
+    public void setAssignedByAdminId(Long assignedByAdminId) {
+        this.assignedByAdminId = assignedByAdminId;
     }
 
     public String getStatus() {

@@ -96,7 +96,7 @@ class ProfileAuditTest {
         assertEquals("PROFILE_UPDATED", log.getAction());
         assertEquals("PROFILE", log.getResourceType());
         assertEquals("101", log.getResourceId());
-        assertEquals(101L, log.getActorUserId());
+        assertEquals("101", log.getActorUserId());
         assertEquals("SUCCESS", log.getOutcome());
         assertEquals("PROFILE_SERVICE", log.getServiceName());
     }
@@ -130,7 +130,7 @@ class ProfileAuditTest {
         assertEquals("ADDRESS_CREATED", log.getAction());
         assertEquals("ADDRESS", log.getResourceType());
         assertEquals("55", log.getResourceId());
-        assertEquals(101L, log.getActorUserId());
+        assertEquals("101", log.getActorUserId());
         assertEquals("SUCCESS", log.getOutcome());
     }
 
@@ -155,7 +155,7 @@ class ProfileAuditTest {
         assertEquals("ADDRESS_DELETED", log.getAction());
         assertEquals("ADDRESS", log.getResourceType());
         assertEquals("55", log.getResourceId());
-        assertEquals(101L, log.getActorUserId());
+        assertEquals("101", log.getActorUserId());
     }
 
     @Test
@@ -179,11 +179,13 @@ class ProfileAuditTest {
         Page<AuditLog> paged = new PageImpl<>(List.of(auditLog));
         when(auditLogRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(paged);
 
-        ResponseEntity<?> response = auditLogController.searchAuditLogs(
-                101L, "PROFILE_UPDATED", "PROFILE", "101", "PROFILE_SERVICE", "SUCCESS", null, null, null, 0, 20, "timestamp", "desc"
+        ResponseEntity<?> response = auditLogController.searchAuditLogs("101", "PROFILE_UPDATED", "PROFILE", "101", "PROFILE_SERVICE", "SUCCESS", null, null, null, 0, 20, "timestamp", "desc"
         );
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
     }
 }
+
+
+

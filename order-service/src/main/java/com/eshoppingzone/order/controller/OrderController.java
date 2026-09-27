@@ -90,7 +90,7 @@ public class OrderController {
 
     @PutMapping("/{id}/status/internal")
     @Operation(summary = "Update Order Status (Internal)", description = "Internal endpoint for Delivery Service status updates")
-    @PreAuthorize("hasAnyRole('INTERNAL', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('INTERNAL', 'ADMIN', 'DELIVERY', 'DELIVERY_AGENT', 'DELIVERY_PARTNER')")
     public ResponseEntity<ApiResponse<OrderDto>> updateOrderStatusInternal(@PathVariable Long id,
                                                                            @Valid @RequestBody UpdateOrderStatusRequest request) {
         OrderDto order = orderService.updateOrderStatusInternal(id, request.getStatus());
@@ -99,7 +99,7 @@ public class OrderController {
 
     @GetMapping("/{id}/internal")
     @Operation(summary = "Get Order Internal", description = "Internal endpoint for other services to get order info")
-    @PreAuthorize("hasAnyRole('INTERNAL', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('INTERNAL', 'ADMIN', 'DELIVERY', 'DELIVERY_AGENT', 'DELIVERY_PARTNER')")
     public ResponseEntity<ApiResponse<OrderDto>> getOrderInternal(@PathVariable Long id) {
         OrderDto order = orderService.getOrderInternal(id);
         return ResponseEntity.ok(ApiResponse.success("Order retrieved successfully", order));

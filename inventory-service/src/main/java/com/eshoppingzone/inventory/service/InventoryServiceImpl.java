@@ -141,6 +141,11 @@ public class InventoryServiceImpl implements InventoryService {
             return;
         }
 
+        if (stockMovementRepository.existsByReferenceAndMovementType(request.getOrderReference(), MovementType.RESERVE)) {
+            log.info("Stock reservation for order {} already exists. Skipping deduction to ensure idempotency.", request.getOrderReference());
+            return;
+        }
+
         // Deterministic lock acquisition order by productId to prevent deadlocks
         List<StockReservationItem> sortedItems = request.getItems().stream()
                 .sorted((a, b) -> Long.compare(a.getProductId(), b.getProductId()))
@@ -185,19 +190,33 @@ public class InventoryServiceImpl implements InventoryService {
             return;
         }
 
+        boolean isConfirmed = request.getOrderReference() != null && stockMovementRepository.existsByReferenceAndMovementType(request.getOrderReference(), MovementType.CONFIRM_CONSUMPTION);
+        boolean hasReleaseMovement = request.getOrderReference() != null && stockMovementRepository.existsByReferenceAndMovementType(request.getOrderReference(), MovementType.RELEASE);
+
+        if (hasReleaseMovement) {
+            log.info("Release request for reference {} has already been processed. Skipping.", request.getOrderReference());
+            return;
+        }
+
         List<StockReservationItem> sortedItems = request.getItems().stream()
                 .sorted((a, b) -> Long.compare(a.getProductId(), b.getProductId()))
                 .collect(Collectors.toList());
 
         for (StockReservationItem item : sortedItems) {
             inventoryRepository.findByProductIdWithLock(item.getProductId()).ifPresent(inventory -> {
-                int releaseQty = Math.min(inventory.getReservedStock(), item.getQuantity());
-                inventory.setReservedStock(inventory.getReservedStock() - releaseQty);
-                inventory.setAvailableStock(inventory.getAvailableStock() + releaseQty);
-                inventoryRepository.save(inventory);
-
-                recordMovement(inventory.getId(), item.getProductId(), MovementType.RELEASE, releaseQty,
-                        request.getOrderReference(), "Reserved stock released back to available");
+                if (isConfirmed) {
+                    inventory.setAvailableStock(inventory.getAvailableStock() + item.getQuantity());
+                    inventoryRepository.save(inventory);
+                    recordMovement(inventory.getId(), item.getProductId(), MovementType.RELEASE, item.getQuantity(),
+                            request.getOrderReference(), "Confirmed stock restored due to rejection/cancellation");
+                } else {
+                    int releaseQty = Math.min(inventory.getReservedStock(), item.getQuantity());
+                    inventory.setReservedStock(inventory.getReservedStock() - releaseQty);
+                    inventory.setAvailableStock(inventory.getAvailableStock() + releaseQty);
+                    inventoryRepository.save(inventory);
+                    recordMovement(inventory.getId(), item.getProductId(), MovementType.RELEASE, releaseQty,
+                            request.getOrderReference(), "Reserved stock released back to available");
+                }
             });
         }
         auditLog("STOCK_RELEASED", "ORDER_STOCK", request.getOrderReference(), "SUCCESS", null,
